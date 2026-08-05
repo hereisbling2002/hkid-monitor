@@ -4,7 +4,7 @@
 
   "monitor": {
     "monitor_before": "2026-12-31",
-    "urgent_before": "2026-09-01",
+    "urgent_before": "2026-09-10",
     "notice_before": "2026-10-15",
     "poll_interval_seconds": 120,
     "cooldown_minutes": 10
