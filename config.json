@@ -1,0 +1,55 @@
+{
+  "_comment": "===== HKID 身份证预约监控配置 =====",
+  "_note": "修改后 commit + push 即可生效，无需重启 Actions",
+
+  "monitor": {
+    "monitor_before": "2026-12-31",
+    "urgent_before": "2026-09-01",
+    "notice_before": "2026-10-15",
+    "poll_interval_seconds": 120,
+    "cooldown_minutes": 10
+  },
+
+  "offices": {
+    "WC":  { "name": "湾仔",     "name_en": "Wan Chai" },
+    "CSW": { "name": "长沙湾",   "name_en": "Cheung Sha Wan" },
+    "TKO": { "name": "将军澳",   "name_en": "Tseung Kwan O" },
+    "FT":  { "name": "火炭",     "name_en": "Fo Tan" },
+    "TM":  { "name": "屯门",     "name_en": "Tuen Mun" },
+    "YL":  { "name": "元朗",     "name_en": "Yuen Long" }
+  },
+
+  "notification": {
+    "email": {
+      "enabled": true,
+      "smtp_host": "smtp.qq.com",
+      "smtp_port": 587,
+      "subject_prefix": "[HKID预约监控]",
+      "daily_limit": 300
+    },
+    "levels": {
+      "urgent": {
+        "label": "🚨 紧急提醒",
+        "email_priority": "high",
+        "color": "#dc2626"
+      },
+      "notice": {
+        "label": "🔔 名额提醒",
+        "email_priority": "normal",
+        "color": "#f59e0b"
+      },
+      "regular": {
+        "label": "📋 常规更新",
+        "email_priority": "low",
+        "color": "#3b82f6"
+      }
+    }
+  },
+
+  "dashboard": {
+    "auto_refresh_seconds": 90,
+    "show_timeline_count": 20,
+    "date_format": "YYYY-MM-DD",
+    "locale": "zh-HK"
+  }
+}

@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HKID 身份证预约监控</title>
+  <meta name="description" content="实时监控香港六大人事登记办事处身份证预约配额">
+  <meta name="theme-color" content="#3b82f6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HKID配额">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪪</text></svg>">
+
+  <style>
+    /* ============================================
+       HKID Quota Monitor — 设计令牌
+       ============================================ */
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-card: #1e293b;
+      --bg-card-hover: #334155;
+      --border: #334155;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #3b82f6;
+      --accent-hover: #60a5fa;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --urgent: #dc2626;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+      --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    /* ============================================
+       基础重置
+       ============================================ */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans HK', 'PingFang HK', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ============================================
+       布局
+       ============================================ */
+    .app {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* ---- 头部 ---- */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    .title-group h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .title-group .subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ---- 状态指示灯 ---- */
+    .status-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .status-dot::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse-dot 2s infinite;
+    }
+
+    .status-dot.offline::before {
+      background: var(--danger);
+      animation: none;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* ---- 按钮 ----
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--text-muted);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    /* ---- 安装提示横幅 ---- */
+    .install-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #1e3a5f, #1e293b);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .install-banner.show {
+      display: flex;
+    }
+
+    .install-banner span {
+      font-size: 14px;
+      flex: 1;
+      min-width: 150px;
+    }
+
+    /* ---- 统计栏 ---- */
+    .stats-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      flex: 1;
+      min-width: 100px;
+      padding: 14px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      text-align: center;
+    }
+
+    .stat-card .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+
+    .stat-card .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-card.available .stat-value { color: var(--success); }
+    .stat-card.urgent .stat-value { color: var(--urgent); }
+    .stat-card.offices .stat-value { color: var(--accent); }
+
+    /* ---- 办事处卡片网格 ---- */
+    .offices-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .office-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      transition: all 0.25s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .office-card:hover {
+      border-color: var(--text-muted);
+      box-shadow: var(--shadow);
+    }
+
+    .office-card.has-quota {
+      border-left: 3px solid var(--success);
+    }
+
+    .office-card.urgent-quota {
+      border-left: 3px solid var(--urgent);
+      animation: urgent-glow 2s infinite;
+    }
+
+    @keyframes urgent-glow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+      50% { box-shadow: 0 0 12px 2px rgba(220, 38, 38, 0.25); }
+    }
+
+    .office-card.no-quota {
+      border-left: 3px solid var(--text-muted);
+      opacity: 0.75;
+    }
+
+    .office-name {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .office-name-en {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    .quota-status {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .quota-status .label {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .quota-status .value {
+      font-size: 15px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    .quota-dates {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .quota-date-tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent-hover);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .quota-date-tag.urgent {
+      background: rgba(220, 38, 38, 0.15);
+      color: #f87171;
+      border-color: rgba(220, 38, 38, 0.3);
+    }
+
+    .no-quota-text {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    /* ---- 时间线 ---- */
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .timeline {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      margin-bottom: 24px;
+      max-height: 360px;
+      overflow-y: auto;
+    }
+
+    .timeline-item {
+      display: flex;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+
+    .timeline-item:last-child {
+      border-bottom: none;
+    }
+
+    .timeline-time {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      min-width: 75px;
+      white-space: nowrap;
+    }
+
+    .timeline-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+
+    .timeline-dot.urgent { background: var(--urgent); }
+    .timeline-dot.notice { background: var(--warning); }
+    .timeline-dot.regular { background: var(--accent); }
+
+    .timeline-content {
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .timeline-content .office-tag {
+      font-weight: 600;
+    }
+
+    .timeline-empty {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 24px;
+      font-size: 13px;
+    }
+
+    /* ---- 底部 ---- */
+    .footer {
+      text-align: center;
+      padding: 20px 0;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      margin-top: 24px;
+    }
+
+    .footer a {
+      color: var(--accent-hover);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* ---- 刷新倒计时 ---- */
+    .refresh-indicator {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 8px;
+    }
+
+    .refresh-indicator .countdown {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    /* ---- 离线横幅 ---- */
+    .offline-banner {
+      display: none;
+      text-align: center;
+      padding: 10px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #f87171;
+    }
+
+    .offline-banner.show {
+      display: block;
+    }
+
+    /* ---- Loading skeleton ---- */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-card-hover) 50%, var(--bg-secondary) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: var(--radius-sm);
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* ---- 响应式 ---- */
+    @media (max-width: 600px) {
+      .app { padding: 10px; }
+      .header { padding: 10px 0; }
+      .title-group h1 { font-size: 17px; }
+      .logo { font-size: 26px; }
+      .offices-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .stats-bar { gap: 8px; }
+      .stat-card { padding: 12px; }
+      .stat-card .stat-value { font-size: 22px; }
+    }
+
+    /* ---- 滚动条 ---- */
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ====== 离线横幅 ====== -->
+  <div class="offline-banner" id="offlineBanner">
+    ⚠️ 当前离线 — 显示的是缓存数据，网络恢复后将自动更新
+  </div>
+
+  <!-- ====== 安装横幅 ====== -->
+  <div class="install-banner" id="installBanner">
+    <span>📲 <strong>添加到主屏幕</strong> — 像 App 一样快速访问，支持离线查看</span>
+    <button class="btn btn-primary" id="btnInstall">安装</button>
+    <button class="btn" id="btnDismiss">✕</button>
+  </div>
+
+  <!-- ====== 头部 ====== -->
+  <header class="header">
+    <div class="header-left">
+      <span class="logo">🪪</span>
+      <div class="title-group">
+        <h1>HKID 预约监控</h1>
+        <p class="subtitle">香港人事登记办事处 · 智能身份证预约配额</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="status-dot" id="statusDot">
+        <span id="statusText">实时监控中</span>
+      </span>
+      <button class="btn" id="btnRefresh" title="手动刷新">
+        🔄 <span id="btnRefreshText">刷新</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ====== 统计栏 ====== -->
+  <div class="stats-bar">
+    <div class="stat-card available">
+      <div class="stat-value" id="statAvailable">--</div>
+      <div class="stat-label">可预约日期</div>
+    </div>
+    <div class="stat-card urgent">
+      <div class="stat-value" id="statUrgent">--</div>
+      <div class="stat-label">🚨 紧急名额</div>
+    </div>
+    <div class="stat-card offices">
+      <div class="stat-value" id="statOffices">6</div>
+      <div class="stat-label">监控办事处</div>
+    </div>
+  </div>
+
+  <!-- ====== 办事处卡片 ====== -->
+  <div class="section-title">📍 各办事处配额状况</div>
+  <div class="offices-grid" id="officesGrid">
+    <!-- JS 动态渲染 -->
+  </div>
+
+  <!-- ====== 放号时间线 ====== -->
+  <div class="section-title">📋 近期放号记录</div>
+  <div class="timeline" id="timeline">
+    <div class="timeline-empty">等待首次数据抓取…</div>
+  </div>
+
+  <!-- ====== 刷新倒计时 ====== -->
+  <div class="refresh-indicator">
+    下次自动刷新：<span class="countdown" id="countdown">90</span> 秒
+    · 最后更新：<span id="lastUpdate">--</span>
+  </div>
+
+  <!-- ====== 底部 ====== -->
+  <footer class="footer">
+    <p>数据来源：香港入境事务处公开配额查询接口 · 第三方工具，非官方服务</p>
+    <p style="margin-top:4px">
+      <a href="https://www.gov.hk/sc/apps/immdicbooking2.htm" target="_blank" rel="noopener">
+        前往官方预约系统 →
+      </a>
+      ·
+      <span id="pwaStatus">PWA 已就绪</span>
+    </p>
+  </footer>
+</div>
+
+<!-- ============================================
+     应用逻辑
+     ============================================ -->
+<script>
+(function() {
+  'use strict';
+
+  // ============ 配置 ============
+  const OFFICES = {
+    'WC':  { name: '湾仔',     nameEn: 'Wan Chai' },
+    'CSW': { name: '长沙湾',   nameEn: 'Cheung Sha Wan' },
+    'TKO': { name: '将军澳',   nameEn: 'Tseung Kwan O' },
+    'FT':  { name: '火炭',     nameEn: 'Fo Tan' },
+    'TM':  { name: '屯门',     nameEn: 'Tuen Mun' },
+    'YL':  { name: '元朗',     nameEn: 'Yuen Long' }
+  };
+
+  const BOOKING_URL = 'https://www.gov.hk/sc/apps/immdicbooking2.htm';
+  const DATA_FILE = 'data/quotas.json';
+  const TIMELINE_FILE = 'data/timeline.json';
+
+  let config = {
+    autoRefreshSeconds: 90,
+    urgentBefore: '2026-09-01',
+    noticeBefore: '2026-10-15'
+  };
+
+  let refreshTimer = null;
+  let countdownTimer = null;
+  let countdown = 90;
+  let installPromptEvent = null;
+
+  // ============ DOM 引用 ============
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => document.querySelectorAll(sel);
+
+  const dom = {
+    statusDot: $('#statusDot'),
+    statusText: $('#statusText'),
+    offlineBanner: $('#offlineBanner'),
+    installBanner: $('#installBanner'),
+    btnInstall: $('#btnInstall'),
+    btnDismiss: $('#btnDismiss'),
+    btnRefresh: $('#btnRefresh'),
+    btnRefreshText: $('#btnRefreshText'),
+    statAvailable: $('#statAvailable'),
+    statUrgent: $('#statUrgent'),
+    statOffices: $('#statOffices'),
+    officesGrid: $('#officesGrid'),
+    timeline: $('#timeline'),
+    countdown: $('#countdown'),
+    lastUpdate: $('#lastUpdate'),
+    pwaStatus: $('#pwaStatus'),
+  };
+
+  // ============ PWA: Service Worker 注册 ============
+  async function registerSW() {
+    if (!('serviceWorker' in navigator)) {
+      dom.pwaStatus.textContent = '浏览器不支持 PWA';
+      return;
+    }
+
+    try {
+      const registration = await navigator.serviceWorker.register('sw.js', {
+        scope: '/'
+      });
+      console.log('[PWA] SW registered:', registration.scope);
+
+      // 检测 SW 更新
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            console.log('[PWA] New version available — refresh to update');
+            dom.pwaStatus.textContent = '🔄 新版本可用';
+          }
+        });
+      });
+
+      dom.pwaStatus.textContent = 'PWA 已就绪 ✅';
+
+      // 监听来自 SW 的消息
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data === 'DATA_CACHE_CLEARED') {
+          console.log('[PWA] Data cache cleared by SW');
+        }
+      });
+
+    } catch (err) {
+      console.warn('[PWA] SW registration failed:', err);
+      dom.pwaStatus.textContent = 'PWA 安装失败';
+    }
+  }
+
+  // ============ PWA: 安装提示 ============
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    installPromptEvent = event;
+    dom.installBanner.classList.add('show');
+    console.log('[PWA] Install prompt ready');
+  });
+
+  dom.btnInstall.addEventListener('click', async () => {
+    if (!installPromptEvent) return;
+    installPromptEvent.prompt();
+    const { outcome } = await installPromptEvent.userChoice;
+    console.log('[PWA] Install outcome:', outcome);
+    dom.installBanner.classList.remove('show');
+    installPromptEvent = null;
+  });
+
+  dom.btnDismiss.addEventListener('click', () => {
+    dom.installBanner.classList.remove('show');
+  });
+
+  // 已安装时标记
+  if (window.matchMedia('(display-mode: standalone)').matches) {
+    dom.pwaStatus.textContent = '已安装 📱';
+  }
+
+  // ============ 网络状态监测 ============
+  function updateOnlineStatus() {
+    const online = navigator.onLine;
+    if (online) {
+      dom.offlineBanner.classList.remove('show');
+      dom.statusDot.classList.remove('offline');
+      dom.statusText.textContent = '实时监控中';
+    } else {
+      dom.offlineBanner.classList.add('show');
+      dom.statusDot.classList.add('offline');
+      dom.statusText.textContent = '离线';
+    }
+  }
+
+  window.addEventListener('online', () => {
+    updateOnlineStatus();
+    loadData(); // 恢复在线立即拉数据
+  });
+  window.addEventListener('offline', updateOnlineStatus);
+  updateOnlineStatus();
+
+  // ============ 加载配置 ============
+  async function loadConfig() {
+    try {
+      const resp = await fetch('config.json');
+      if (resp.ok) {
+        const cfg = await resp.json();
+        config.autoRefreshSeconds = cfg.dashboard?.auto_refresh_seconds || 90;
+        config.urgentBefore = cfg.monitor?.urgent_before || '2026-09-01';
+        config.noticeBefore = cfg.monitor?.notice_before || '2026-10-15';
+      }
+    } catch (err) {
+      console.warn('Using default config:', err.message);
+    }
+  }
+
+  // ============ 数据加载与渲染 ============
+  async function loadData() {
+    dom.btnRefreshText.textContent = '刷新中…';
+    dom.btnRefresh.disabled = true;
+
+    try {
+      // 尝试加载配额数据
+      const [quotaResp, timelineResp] = await Promise.allSettled([
+        fetch(DATA_FILE + '?t=' + Date.now()),
+        fetch(TIMELINE_FILE + '?t=' + Date.now())
+      ]);
+
+      if (quotaResp.status === 'fulfilled' && quotaResp.value.ok) {
+        const quotaData = await quotaResp.value.json();
+        renderOffices(quotaData);
+      } else {
+        showDemoData();
+      }
+
+      if (timelineResp.status === 'fulfilled' && timelineResp.value.ok) {
+        const timelineData = await timelineResp.value.json();
+        renderTimeline(timelineData);
+      } else if (quotaResp.status === 'fulfilled') {
+        // 没有独立时间线文件时不显示 demo 时间线，等真实数据
+      }
+
+      dom.lastUpdate.textContent = new Date().toLocaleTimeString('zh-HK');
+      dom.statusDot.classList.remove('offline');
+      dom.statusText.textContent = '实时监控中';
+
+    } catch (err) {
+      console.warn('Data load failed:', err);
+      dom.statusText.textContent = '数据加载失败';
+    } finally {
+      dom.btnRefreshText.textContent = '刷新';
+      dom.btnRefresh.disabled = false;
+      resetCountdown();
+    }
+  }
+
+  // ============ 演示数据（离线或首次加载时） ============
+  function showDemoData() {
+    const demo = {};
+    Object.keys(OFFICES).forEach((key) => {
+      demo[key] = { quota_dates: [], total_quota: 0 };
+    });
+    renderOffices(demo);
+  }
+
+  // ============ 渲染办事处卡片 ============
+  function renderOffices(data) {
+    let totalDates = 0;
+    let urgentDates = 0;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const sevenDaysLater = new Date(today);
+    sevenDaysLater.setDate(today.getDate() + 7);
+
+    const cards = Object.entries(OFFICES).map(([key, office]) => {
+      const officeData = data[key] || { quota_dates: [], total_quota: 0 };
+      const dates = officeData.quota_dates || [];
+      const total = officeData.total_quota || 0;
+
+      totalDates += dates.length;
+
+      // 判断是否有紧急名额（7天内）
+      let hasUrgent = false;
+      dates.forEach((d) => {
+        const date = new Date(d);
+        date.setHours(0, 0, 0, 0);
+        if (date <= sevenDaysLater) {
+          hasUrgent = true;
+          urgentDates++;
+        }
+      });
+
+      let cardClass = 'office-card no-quota';
+      if (hasUrgent) cardClass = 'office-card urgent-quota';
+      else if (dates.length > 0) cardClass = 'office-card has-quota';
+
+      let statusHtml = '';
+      if (hasUrgent) {
+        statusHtml = `<span style="color:var(--urgent);font-size:13px;">🚨 名额紧张！</span>`;
+      } else if (dates.length > 0) {
+        statusHtml = `<span style="color:var(--success);font-size:13px;">✅ ${dates.length} 天可选</span>`;
+      } else {
+        statusHtml = `<span style="color:var(--text-muted);font-size:13px;">暂无空位</span>`;
+      }
+
+      // 日期标签
+      let dateTags = '';
+      dates.slice(0, 5).forEach((d) => {
+        const date = new Date(d);
+        date.setHours(0, 0, 0, 0);
+        const isUrgent = date <= sevenDaysLater;
+        const cls = isUrgent ? 'quota-date-tag urgent' : 'quota-date-tag';
+        dateTags += `<span class="${cls}">${d}</span>`;
+      });
+      if (dates.length > 5) {
+        dateTags += `<span style="font-size:11px;color:var(--text-muted);">+${dates.length - 5} 更多</span>`;
+      }
+
+      return `
+        <div class="${cardClass}">
+          <div class="office-name">${office.name}</div>
+          <div class="office-name-en">${office.nameEn} (${key})</div>
+          <div class="quota-status">
+            <span class="label">剩余名额：</span>
+            <span class="value" style="color:${hasUrgent ? 'var(--urgent)' : dates.length ? 'var(--success)' : 'var(--text-muted)'}">${total}</span>
+          </div>
+          ${statusHtml}
+          <div class="quota-dates">${dateTags || '<span class="no-quota-text">暂无可用预约日期</span>'}</div>
+        </div>
+      `;
+    });
+
+    dom.officesGrid.innerHTML = cards.join('');
+    dom.statAvailable.textContent = totalDates;
+    dom.statUrgent.textContent = urgentDates;
+  }
+
+  // ============ 渲染时间线 ============
+  function renderTimeline(timelineData) {
+    const events = (timelineData && timelineData.events) ? timelineData.events : [];
+
+    if (!events.length) {
+      dom.timeline.innerHTML = '<div class="timeline-empty">暂无放号记录 — 连续监控中…</div>';
+      return;
+    }
+
+    const items = events.slice(0, 20).map((evt) => {
+      let dotClass = 'regular';
+      if (evt.level === 'urgent') dotClass = 'urgent';
+      else if (evt.level === 'notice') dotClass = 'notice';
+
+      const time = evt.time ? new Date(evt.time).toLocaleString('zh-HK', {
+        month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      }) : '--';
+
+      const officeName = OFFICES[evt.office] ? OFFICES[evt.office].name : evt.office;
+      const dateInfo = evt.dates ? evt.dates.join(', ') : (evt.date || '--');
+
+      return `
+        <div class="timeline-item">
+          <span class="timeline-time">${time}</span>
+          <span class="timeline-dot ${dotClass}"></span>
+          <span class="timeline-content">
+            <span class="office-tag">${officeName}</span>
+            ${evt.level === 'urgent' ? '🚨' : evt.level === 'notice' ? '🔔' : '📋'}
+            放号：${dateInfo}
+            ${evt.quota ? `（${evt.quota} 个名额）` : ''}
+          </span>
+        </div>
+      `;
+    });
+
+    dom.timeline.innerHTML = items.join('');
+  }
+
+  // ============ 倒计时刷新 ============
+  function resetCountdown() {
+    countdown = config.autoRefreshSeconds;
+    dom.countdown.textContent = countdown;
+  }
+
+  function startCountdown() {
+    clearInterval(countdownTimer);
+    countdownTimer = setInterval(() => {
+      countdown--;
+      dom.countdown.textContent = countdown;
+      if (countdown <= 0) {
+        loadData();
+      }
+    }, 1000);
+  }
+
+  // ============ 事件绑定 ============
+  dom.btnRefresh.addEventListener('click', loadData);
+
+  // 页面可见时刷新数据
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && navigator.onLine) {
+      loadData();
+    }
+  });
+
+  // ============ 启动 ============
+  async function init() {
+    await loadConfig();
+    await registerSW();
+    await loadData();
+    startCountdown();
+    console.log('[App] HKID Monitor initialized');
+    console.log('[App] Auto-refresh:', config.autoRefreshSeconds + 's');
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

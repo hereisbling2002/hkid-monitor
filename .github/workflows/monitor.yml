@@ -1,0 +1,68 @@
+name: HKID Quota Monitor
+
+# ============================================================
+# 触发条件:
+# 1. repository_dispatch: cron-job.org 外部触发（~2 分钟）
+# 2. schedule: GitHub 内置兜底（每 15 分钟）
+# 3. workflow_dispatch: 手动触发
+# ============================================================
+
+on:
+  repository_dispatch:
+    types: [quota-check]
+  schedule:
+    - cron: '*/15 * * * *'   # 兜底: 每 15 分钟
+  workflow_dispatch:          # 手动触发
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run quota monitor
+        env:
+          QQ_SMTP_USER:  ${{ secrets.QQ_SMTP_USER }}
+          QQ_SMTP_PASS:  ${{ secrets.QQ_SMTP_PASS }}
+          ADMIN_EMAIL:   ${{ secrets.ADMIN_EMAIL }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+        run: python -m quota_monitor.run
+
+      - name: Commit updated data
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 检查 data/ 目录是否有变更
+          if git diff --quiet data/; then
+            echo "No changes in data/"
+          else
+            git add data/
+            git commit -m "📊 update quota snapshot [skip ci]"
+            git push
+            echo "Data committed and pushed"
+          fi
+
+      - name: Purge jsDelivr cache
+        if: success()
+        run: |
+          # 刷新 CDN 缓存，让看板尽快获取最新数据
+          curl -s -o /dev/null -w "Purge quotas.json: %{http_code}\n" \
+            "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/data/quotas.json"
+          curl -s -o /dev/null -w "Purge timeline.json: %{http_code}\n" \
+            "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/data/timeline.json"
