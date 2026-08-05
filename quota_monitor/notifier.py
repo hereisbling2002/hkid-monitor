@@ -150,6 +150,8 @@ def _build_email(events: list, level: str, config: dict) -> tuple:
     # 正文：构建事件表格行
     event_rows = ""
     for e in events:
+        status_show = {"g": "充足 ✅", "y": "少量 ⚡", "r": "已满", "x": "不开放"}.get(e.get("new_status", ""), e.get("new_status", ""))
+        session = e.get("session_label", "")
         event_rows += f"""
         <tr>
           <td style="padding:8px 12px; border-bottom:1px solid #e2e8f0;">
@@ -159,7 +161,7 @@ def _build_email(events: list, level: str, config: dict) -> tuple:
           </td>
           <td style="padding:8px 12px; font-weight:600; border-bottom:1px solid #e2e8f0;">{e['date']}</td>
           <td style="padding:8px 12px; border-bottom:1px solid #e2e8f0; color:{color}; font-weight:600;">
-            {e['new_quota']} 个名额
+            {status_show}
           </td>
         </tr>"""
 

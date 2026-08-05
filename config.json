@@ -11,12 +11,12 @@
   },
 
   "offices": {
-    "WC":  { "name": "湾仔",     "name_en": "Wan Chai" },
-    "CSW": { "name": "长沙湾",   "name_en": "Cheung Sha Wan" },
-    "TKO": { "name": "将军澳",   "name_en": "Tseung Kwan O" },
-    "FT":  { "name": "火炭",     "name_en": "Fo Tan" },
-    "TM":  { "name": "屯门",     "name_en": "Tuen Mun" },
-    "YL":  { "name": "元朗",     "name_en": "Yuen Long" }
+    "RHK": { "name": "湾仔",     "name_en": "Wan Chai" },
+    "RKO": { "name": "长沙湾",   "name_en": "Cheung Sha Wan" },
+    "RTK": { "name": "将军澳",   "name_en": "Tseung Kwan O" },
+    "FTO": { "name": "火炭",     "name_en": "Fo Tan" },
+    "TMO": { "name": "屯门",     "name_en": "Tuen Mun" },
+    "YLO": { "name": "元朗",     "name_en": "Yuen Long" }
   },
 
   "notification": {

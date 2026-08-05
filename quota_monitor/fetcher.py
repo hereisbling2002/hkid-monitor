@@ -1,4 +1,8 @@
-"""抓取入境处公开配额接口"""
+"""抓取入境处公开配额接口
+
+API 来源: eservices.es2.immd.gov.hk/surgecontrolgate/ticket/getSituation?svcId=579
+响应: 576 行数据 = 6 办事处 × 96 天，包含 quotaR（一般时段）和 quotaK（延长时段）
+"""
 
 import json
 import logging
@@ -11,30 +15,52 @@ from .config import ROOT
 
 logger = logging.getLogger(__name__)
 
-# ---- 入境处配额查询 API ----
-# 此接口来自入境处官网预约系统的同源 AJAX 接口
-# 参考: hkid-quota-monitor/docs/api-notes.md
+# ---- 入境处真实配额查询 API ----
+# 逆向自官方配额预览页: eservices.es2.immd.gov.hk/es/quota-enquiry-client/?appId=579
+# 无需 Cookie / Token，直接 GET 即可
+API_URL = "https://eservices.es2.immd.gov.hk/surgecontrolgate/ticket/getSituation"
+API_SVC_ID = "579"
 
-BASE_URL = "https://webapp.es2.immd.gov.hk/smartics2-client/ropbooking"
-
-# 六个办事处对应的请求参数（实际参数需通过浏览器 DevTools 抓包确认）
-# 以下为推断值，如接口变动需更新
-OFFICES = {
-    "WC":  {"code": "WCH", "name_zh": "湾仔",     "name_en": "Wan Chai"},
-    "CSW": {"code": "CSW", "name_zh": "长沙湾",   "name_en": "Cheung Sha Wan"},
-    "TKO": {"code": "TKO", "name_zh": "将军澳",   "name_en": "Tseung Kwan O"},
-    "FT":  {"code": "FOT", "name_zh": "火炭",     "name_en": "Fo Tan"},
-    "TM":  {"code": "TMN", "name_zh": "屯门",     "name_en": "Tuen Mun"},
-    "YL":  {"code": "YUL", "name_zh": "元朗",     "name_en": "Yuen Long"},
+# 办事处映射: API officeId → 内部代号
+OFFICE_MAP = {
+    "RHK": "湾仔",
+    "RKO": "长沙湾",
+    "RTK": "将军澳",
+    "FTO": "火炭",
+    "TMO": "屯门",
+    "YLO": "元朗",
 }
 
-# 请求头（模拟浏览器）
+OFFICE_NAMES_EN = {
+    "RHK": "Wan Chai",
+    "RKO": "Cheung Sha Wan",
+    "RTK": "Tseung Kwan O",
+    "FTO": "Fo Tan",
+    "TMO": "Tuen Mun",
+    "YLO": "Yuen Long",
+}
+
+# 状态转换: API CSS class → 单字符（参照 hkid-quota-monitor 规范）
+STATUS_MAP = {
+    "quota-g": "g",  # 充足
+    "quota-y": "y",  # 少量
+    "quota-r": "r",  # 已满
+}
+
+STATUS_LABEL = {
+    "g": "充足",
+    "y": "少量",
+    "r": "已满",
+    "x": "不开放",
+}
+
+# 请求头
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "zh-HK,zh;q=0.9,en;q=0.8",
-    "Referer": "https://webapp.es2.immd.gov.hk/smartics2-client/ropbooking/",
+    "Referer": "https://eservices.es2.immd.gov.hk/es/quota-enquiry-client/?appId=579",
 }
 
 HKT = timezone(timedelta(hours=8))
@@ -42,14 +68,22 @@ HKT = timezone(timedelta(hours=8))
 
 def fetch_all_offices() -> dict:
     """
-    抓取所有办事处的配额数据。
+    抓取所有办事处的配额数据（单次请求获取全部 6 个办事处）。
 
     返回格式:
     {
         "fetched_at": "2026-08-05T14:30:00+08:00",
+        "last_update_time": "08/05/2026 14:25:00",
         "offices": {
-            "WC": {"name_zh": "湾仔", "quota": {"2026-08-10": 5, "2026-08-11": 0}},
-            "CSW": {...}, ...
+            "RHK": {
+                "name_zh": "湾仔",
+                "name_en": "Wan Chai",
+                "quota": {
+                    "2026-08-10": {"R": "g", "K": "x"},
+                    "2026-08-11": {"R": "r", "K": "r"},
+                }
+            },
+            ...
         }
     }
     """
@@ -58,122 +92,83 @@ def fetch_all_offices() -> dict:
         "offices": {},
     }
 
-    session = requests.Session()
-    session.headers.update(HEADERS)
-
-    for office_id, office_info in OFFICES.items():
-        try:
-            quota = _fetch_office(session, office_info["code"])
-            result["offices"][office_id] = {
-                "name_zh": office_info["name_zh"],
-                "name_en": office_info["name_en"],
-                "quota": quota,
-            }
-            logger.info(f"  {office_info['name_zh']}: {len(quota)} 天有数据")
-            time.sleep(0.5)  # 礼貌间隔，避免请求过快
-        except Exception as e:
-            logger.warning(f"  {office_info['name_zh']}: 抓取失败 — {e}")
-            result["offices"][office_id] = {
-                "name_zh": office_info["name_zh"],
-                "name_en": office_info["name_en"],
-                "quota": {},
-                "error": str(e),
-            }
-
-    session.close()
-    return result
-
-
-def _fetch_office(session: requests.Session, office_code: str) -> dict:
-    """
-    抓取单个办事处的配额。
-
-    注意: 实际 API endpoint 和参数需要从入境处官网预约页面抓包确认。
-    以下 URL 和参数格式为推断，需要根据实际情况调整。
-
-    已知端点模式（参考 hkid-quota-monitor）:
-    - 查询日配额: GET /api/booking/dailyQuota?officeId={code}&date={date}
-    - 查询可用日期: GET /api/booking/availableDates?officeId={code}
-    """
-    # ---- 方式 1: 查询可用日期列表 ----
     try:
-        url = f"{BASE_URL}/api/booking/availableDates"
-        params = {"officeId": office_code}
-        resp = session.get(url, params=params, timeout=15)
+        # 构造 URL（带毫秒时间戳防缓存）
+        ts = int(time.time() * 1000)
+        url = f"{API_URL}?svcId={API_SVC_ID}&t={ts}"
 
-        if resp.status_code == 200:
-            data = resp.json()
-            return _parse_quota_response(data)
+        logger.info(f"请求 API: {url}")
+        resp = requests.get(url, headers=HEADERS, timeout=30)
 
-        logger.warning(f"    {office_code}: HTTP {resp.status_code}")
+        if resp.status_code != 200:
+            logger.error(f"API 返回 HTTP {resp.status_code}")
+            return result
+
+        data = resp.json()
+        logger.info(f"API 响应大小: {len(resp.content)} bytes")
+
+        # 记录官方数据更新时间
+        last_update = data.get("lastUpdateTime", "")
+        if last_update:
+            result["last_update_time"] = last_update
+            logger.info(f"官方数据更新时间: {last_update}")
+
+        # 解析 data[] 数组
+        rows = data.get("data", [])
+        logger.info(f"总行数: {len(rows)}")
+
+        # 按办事处分组
+        for row in rows:
+            office_id = row.get("officeId", "")
+            if office_id not in OFFICE_MAP:
+                continue
+
+            if office_id not in result["offices"]:
+                result["offices"][office_id] = {
+                    "name_zh": OFFICE_MAP[office_id],
+                    "name_en": OFFICE_NAMES_EN.get(office_id, office_id),
+                    "quota": {},
+                }
+
+            # 日期转换: MM/DD/YYYY → YYYY-MM-DD
+            raw_date = row.get("date", "")
+            try:
+                dt = datetime.strptime(raw_date, "%m/%d/%Y")
+                date_str = dt.strftime("%Y-%m-%d")
+            except ValueError:
+                logger.warning(f"无法解析日期: {raw_date}")
+                continue
+
+            # 解析状态
+            quota_r = row.get("quotaR", "")
+            quota_k = row.get("quotaK", "")
+
+            r_status = STATUS_MAP.get(quota_r, "?")
+            # quotaK 特殊处理: "no-quotaK" 表示该日无延长时段
+            if quota_k == "no-quotaK":
+                k_status = "x"
+            else:
+                k_status = STATUS_MAP.get(quota_k, "?")
+
+            result["offices"][office_id]["quota"][date_str] = {
+                "R": r_status,
+                "K": k_status,
+            }
+
+        # 统计
+        for oid, odata in result["offices"].items():
+            q = odata["quota"]
+            available = sum(1 for v in q.values() if v["R"] in ("g", "y"))
+            logger.info(f"  {odata['name_zh']} ({oid}): {len(q)} 天, {available} 天可预约")
+
     except requests.RequestException as e:
-        logger.warning(f"    {office_code}: 请求异常 — {e}")
+        logger.error(f"API 请求失败: {e}")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON 解析失败: {e}")
+    except Exception as e:
+        logger.error(f"未知错误: {e}")
 
-    # ---- 方式 2: 回退 — 逐日查询接下来 96 个工作日 ----
-    # （效率较低但更可靠）
-    try:
-        return _fetch_by_date_range(session, office_code)
-    except Exception:
-        pass
-
-    return {}
-
-
-def _parse_quota_response(data: dict) -> dict:
-    """
-    解析 API 响应为 {日期: 配额数} 字典。
-    由于入境处 API 为非公开接口，此解析逻辑需根据实际响应结构调整。
-    """
-    quota = {}
-
-    # 尝试多种可能的响应格式
-    if isinstance(data, dict):
-        # 格式 1: {"dates": [{"date": "2026-08-10", "quota": 5}, ...]}
-        for item in data.get("dates", []):
-            d = item.get("date")
-            q = item.get("quota", item.get("remaining", 0))
-            if d:
-                quota[d] = int(q)
-
-        # 格式 2: {"2026-08-10": 5, "2026-08-11": 0}
-        if not quota:
-            for k, v in data.items():
-                if isinstance(k, str) and len(k) == 10 and k[4] == "-":
-                    quota[k] = int(v) if isinstance(v, (int, float)) else 0
-
-    elif isinstance(data, list):
-        # 格式 3: [{"date": "2026-08-10", "quota": 5}, ...]
-        for item in data:
-            d = item.get("date")
-            q = item.get("quota", item.get("remaining", 0))
-            if d:
-                quota[d] = int(q)
-
-    return quota
-
-
-def _fetch_by_date_range(session: requests.Session, office_code: str,
-                         num_days: int = 96) -> dict:
-    """逐日回退查询（效率低，仅在主接口失败时使用）"""
-    from datetime import date as Date, timedelta
-
-    quota = {}
-    today = Date.today()
-
-    for i in range(num_days):
-        d = (today + timedelta(days=i)).isoformat()
-        try:
-            url = f"{BASE_URL}/api/booking/dailyQuota"
-            resp = session.get(url, params={"officeId": office_code, "date": d}, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                q = data.get("quota", data.get("remaining", 0))
-                if isinstance(q, (int, float)):
-                    quota[d] = int(q)
-        except Exception:
-            continue
-
-    return quota
+    return result
 
 
 def save_snapshot(data: dict):
@@ -181,7 +176,7 @@ def save_snapshot(data: dict):
     data_dir = ROOT / "data"
     data_dir.mkdir(exist_ok=True)
 
-    # 保存最新的快照（会覆盖）
+    # 保存最新快照
     snapshot_path = data_dir / "quotas.json"
     with open(snapshot_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

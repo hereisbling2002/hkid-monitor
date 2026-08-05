@@ -587,13 +587,15 @@
 
   // ============ 配置 ============
   const OFFICES = {
-    'WC':  { name: '湾仔',     nameEn: 'Wan Chai' },
-    'CSW': { name: '长沙湾',   nameEn: 'Cheung Sha Wan' },
-    'TKO': { name: '将军澳',   nameEn: 'Tseung Kwan O' },
-    'FT':  { name: '火炭',     nameEn: 'Fo Tan' },
-    'TM':  { name: '屯门',     nameEn: 'Tuen Mun' },
-    'YL':  { name: '元朗',     nameEn: 'Yuen Long' }
+    'RHK': { name: '湾仔',     nameEn: 'Wan Chai' },
+    'RKO': { name: '长沙湾',   nameEn: 'Cheung Sha Wan' },
+    'RTK': { name: '将军澳',   nameEn: 'Tseung Kwan O' },
+    'FTO': { name: '火炭',     nameEn: 'Fo Tan' },
+    'TMO': { name: '屯门',     nameEn: 'Tuen Mun' },
+    'YLO': { name: '元朗',     nameEn: 'Yuen Long' }
   };
+
+  const STATUS_LABELS = { 'g': '充足 ✅', 'y': '少量 ⚡', 'r': '已满 🔴', 'x': '不开放', '?': '未知' };
 
   const BOOKING_URL = 'https://www.gov.hk/sc/apps/immdicbooking2.htm';
   const DATA_FILE = 'data/quotas.json';
@@ -776,17 +778,18 @@
 
   // ============ 演示数据（离线或首次加载时） ============
   function showDemoData() {
-    const demo = {};
+    const demo = { offices: {} };
     Object.keys(OFFICES).forEach((key) => {
-      demo[key] = { quota_dates: [], total_quota: 0 };
+      demo.offices[key] = { name_zh: OFFICES[key].name, name_en: OFFICES[key].nameEn, quota: {} };
     });
     renderOffices(demo);
   }
 
   // ============ 渲染办事处卡片 ============
   function renderOffices(data) {
-    let totalDates = 0;
-    let urgentDates = 0;
+    const offices = data.offices || data;
+    let totalAvailable = 0;   // g+y 天数
+    let totalUrgent = 0;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -794,47 +797,55 @@
     sevenDaysLater.setDate(today.getDate() + 7);
 
     const cards = Object.entries(OFFICES).map(([key, office]) => {
-      const officeData = data[key] || { quota_dates: [], total_quota: 0 };
-      const dates = officeData.quota_dates || [];
-      const total = officeData.total_quota || 0;
+      const officeData = offices[key] || { quota: {} };
+      const quota = officeData.quota || {};
+      const dates = Object.keys(quota).sort();
 
-      totalDates += dates.length;
-
-      // 判断是否有紧急名额（7天内）
-      let hasUrgent = false;
-      dates.forEach((d) => {
-        const date = new Date(d);
-        date.setHours(0, 0, 0, 0);
-        if (date <= sevenDaysLater) {
-          hasUrgent = true;
-          urgentDates++;
-        }
+      // 筛选一般时段(R)可预约的日期
+      const availableDates = dates.filter(d => {
+        const s = quota[d];
+        return s && (s.R === 'g' || s.R === 'y');
       });
 
-      let cardClass = 'office-card no-quota';
-      if (hasUrgent) cardClass = 'office-card urgent-quota';
-      else if (dates.length > 0) cardClass = 'office-card has-quota';
+      totalAvailable += availableDates.length;
 
+      // 紧急日期（7天内且可预约）
+      const urgentAvailable = availableDates.filter(d => {
+        const date = new Date(d);
+        date.setHours(0, 0, 0, 0);
+        if (date <= sevenDaysLater) { totalUrgent++; return true; }
+        return false;
+      });
+
+      // 卡片样式
+      let cardClass = 'office-card no-quota';
+      if (urgentAvailable.length > 0) cardClass = 'office-card urgent-quota';
+      else if (availableDates.length > 0) cardClass = 'office-card has-quota';
+
+      // 状态摘要
       let statusHtml = '';
-      if (hasUrgent) {
-        statusHtml = `<span style="color:var(--urgent);font-size:13px;">🚨 名额紧张！</span>`;
-      } else if (dates.length > 0) {
-        statusHtml = `<span style="color:var(--success);font-size:13px;">✅ ${dates.length} 天可选</span>`;
+      if (urgentAvailable.length > 0) {
+        statusHtml = `<span style="color:var(--urgent);font-size:13px;">🚨 ${urgentAvailable.length} 天紧急</span>`;
+      } else if (availableDates.length > 0) {
+        statusHtml = `<span style="color:var(--success);font-size:13px;">✅ ${availableDates.length} 天可选</span>`;
       } else {
         statusHtml = `<span style="color:var(--text-muted);font-size:13px;">暂无空位</span>`;
       }
 
-      // 日期标签
+      // 可预约日期标签（优先显示紧急日期）
+      let displayDates = [...urgentAvailable, ...availableDates.filter(d => !urgentAvailable.includes(d))];
       let dateTags = '';
-      dates.slice(0, 5).forEach((d) => {
+      displayDates.slice(0, 4).forEach((d) => {
         const date = new Date(d);
         date.setHours(0, 0, 0, 0);
         const isUrgent = date <= sevenDaysLater;
         const cls = isUrgent ? 'quota-date-tag urgent' : 'quota-date-tag';
-        dateTags += `<span class="${cls}">${d}</span>`;
+        const stat = quota[d];
+        const label = STATUS_LABELS[stat.R] || stat.R;
+        dateTags += `<span class="${cls}">${d.slice(5)} ${label}</span>`;
       });
-      if (dates.length > 5) {
-        dateTags += `<span style="font-size:11px;color:var(--text-muted);">+${dates.length - 5} 更多</span>`;
+      if (displayDates.length > 4) {
+        dateTags += `<span style="font-size:11px;color:var(--text-muted);">+${displayDates.length - 4} 更多</span>`;
       }
 
       return `
@@ -842,18 +853,18 @@
           <div class="office-name">${office.name}</div>
           <div class="office-name-en">${office.nameEn} (${key})</div>
           <div class="quota-status">
-            <span class="label">剩余名额：</span>
-            <span class="value" style="color:${hasUrgent ? 'var(--urgent)' : dates.length ? 'var(--success)' : 'var(--text-muted)'}">${total}</span>
+            <span class="label">可预约：</span>
+            <span class="value" style="color:${urgentAvailable.length ? 'var(--urgent)' : availableDates.length ? 'var(--success)' : 'var(--text-muted)'}">${availableDates.length} 天</span>
           </div>
           ${statusHtml}
-          <div class="quota-dates">${dateTags || '<span class="no-quota-text">暂无可用预约日期</span>'}</div>
+          <div class="quota-dates">${dateTags || '<span class="no-quota-text">暂无可用预约日期（一般时段）</span>'}</div>
         </div>
       `;
     });
 
     dom.officesGrid.innerHTML = cards.join('');
-    dom.statAvailable.textContent = totalDates;
-    dom.statUrgent.textContent = urgentDates;
+    dom.statAvailable.textContent = totalAvailable;
+    dom.statUrgent.textContent = totalUrgent;
   }
 
   // ============ 渲染时间线 ============
@@ -876,7 +887,8 @@
       }) : '--';
 
       const officeName = OFFICES[evt.office] ? OFFICES[evt.office].name : evt.office;
-      const dateInfo = evt.dates ? evt.dates.join(', ') : (evt.date || '--');
+      const session = evt.session_label || '';
+      const statusChange = evt.new_status ? `→${STATUS_LABELS[evt.new_status] || evt.new_status}` : '';
 
       return `
         <div class="timeline-item">
@@ -885,8 +897,8 @@
           <span class="timeline-content">
             <span class="office-tag">${officeName}</span>
             ${evt.level === 'urgent' ? '🚨' : evt.level === 'notice' ? '🔔' : '📋'}
-            放号：${dateInfo}
-            ${evt.quota ? `（${evt.quota} 个名额）` : ''}
+            放号：${evt.date}
+            ${session ? `[${session}]` : ''} ${statusChange}
           </span>
         </div>
       `;
