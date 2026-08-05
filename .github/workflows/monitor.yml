@@ -48,11 +48,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 检查 data/ 目录是否有变更
-          if git diff --quiet data/; then
+          # 先 add 所有 data/ 下的文件（含新文件）
+          git add data/
+
+          # 检查暂存区是否有变化
+          if git diff --cached --quiet; then
             echo "No changes in data/"
           else
-            git add data/
             git commit -m "📊 update quota snapshot [skip ci]"
             git push
             echo "Data committed and pushed"
