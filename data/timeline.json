@@ -1,6 +1,17 @@
 {
   "events": [
     {
+      "office": "YLO",
+      "name_zh": "元朗",
+      "date": "2026-09-25",
+      "old_status": "y",
+      "new_status": "g",
+      "session": "R",
+      "session_label": "一般",
+      "level": "notice",
+      "time": "2026-08-06T19:16:26.484846+08:00"
+    },
+    {
       "office": "RTK",
       "name_zh": "将军澳",
       "date": "2026-09-25",
