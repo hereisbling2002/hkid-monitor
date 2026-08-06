@@ -55,7 +55,9 @@ def run():
     if events:
         for e in events:
             icon = {"urgent": "🚨", "notice": "🔔", "regular": "📋"}.get(e["level"], "")
-            logger.info(f"  {icon} {e['name_zh']} — {e['date']} ({e['new_quota']} 个名额) [{e['level']}]")
+            status_show = {"g": "充足", "y": "少量", "r": "已满"}.get(e.get("new_status", ""), e.get("new_status", ""))
+            session = e.get("session_label", "")
+            logger.info(f"  {icon} {e['name_zh']} {e['date']} [{session}] → {status_show} [{e['level']}]")
     else:
         logger.info("无新的放号事件")
 
