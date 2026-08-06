@@ -1,6 +1,17 @@
 {
   "events": [
     {
+      "office": "RHK",
+      "name_zh": "湾仔",
+      "date": "2026-09-28",
+      "old_status": "r",
+      "new_status": "y",
+      "session": "R",
+      "session_label": "一般",
+      "level": "notice",
+      "time": "2026-08-06T23:20:35.299964+08:00"
+    },
+    {
       "office": "TMO",
       "name_zh": "屯门",
       "date": "2026-09-28",
