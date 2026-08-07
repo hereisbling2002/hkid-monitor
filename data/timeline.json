@@ -1,6 +1,39 @@
 {
   "events": [
     {
+      "office": "RHK",
+      "name_zh": "湾仔",
+      "date": "2026-09-30",
+      "old_status": "r",
+      "new_status": "y",
+      "session": "R",
+      "session_label": "一般",
+      "level": "notice",
+      "time": "2026-08-07T23:08:20.642416+08:00"
+    },
+    {
+      "office": "TMO",
+      "name_zh": "屯门",
+      "date": "2026-09-30",
+      "old_status": "r",
+      "new_status": "y",
+      "session": "R",
+      "session_label": "一般",
+      "level": "notice",
+      "time": "2026-08-07T23:08:20.642416+08:00"
+    },
+    {
+      "office": "FTO",
+      "name_zh": "火炭",
+      "date": "2026-10-06",
+      "old_status": "r",
+      "new_status": "y",
+      "session": "R",
+      "session_label": "一般",
+      "level": "notice",
+      "time": "2026-08-07T23:08:20.642416+08:00"
+    },
+    {
       "office": "RTK",
       "name_zh": "将军澳",
       "date": "2026-09-30",
