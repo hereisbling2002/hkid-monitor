@@ -1,6 +1,17 @@
 {
   "events": [
     {
+      "office": "RKO",
+      "name_zh": "长沙湾",
+      "date": "2026-09-24",
+      "old_status": "r",
+      "new_status": "y",
+      "session": "R",
+      "session_label": "一般",
+      "level": "notice",
+      "time": "2026-08-08T17:04:20.640975+08:00"
+    },
+    {
       "office": "YLO",
       "name_zh": "元朗",
       "date": "2026-09-17",
@@ -2188,17 +2199,6 @@
       "session_label": "一般",
       "level": "notice",
       "time": "2026-08-06T20:42:19.788279+08:00"
-    },
-    {
-      "office": "YLO",
-      "name_zh": "元朗",
-      "date": "2026-09-25",
-      "old_status": "y",
-      "new_status": "g",
-      "session": "R",
-      "session_label": "一般",
-      "level": "notice",
-      "time": "2026-08-06T19:16:26.484846+08:00"
     }
   ]
 }
